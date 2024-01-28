@@ -1,0 +1,113 @@
+/*{
+    "author": "Timothy Wood",
+    "targets": ["omnigraffle"],
+    "type": "action",
+    "identifier": "art.tjw.Circle Divider",
+    "version": "0.1",
+    "description": "A plug-in that generates a circle with even marks for prime number angle division.",
+    "label": "Circle Divider",
+    "mediumLabel": "Circle Divider",
+    "longLabel": "Circle Divider",
+    "paletteLabel": "Circle Divider",
+}*/
+(() => {
+    var action = new PlugIn.Action(function(selection) {
+        // Canvas units are in points
+        function inchesToCanvas(inches) {
+            return inches * 72.0;   
+        };
+        
+        const canvas = selection.canvas;
+        
+        const innerDiameter = inchesToCanvas(12);
+        const outerDiameter = inchesToCanvas(18);
+        const slotWidth = inchesToCanvas(1/8);
+        const slotInset = inchesToCanvas(3/8);
+        
+        const cut = Color.RGB(0, 0, 1);
+        const engraveLine = Color.RGB(1, 0, 0);
+        const engraveArea = Color.RGB(0, 0, 0);
+        
+        // Inner and outer circle cuts
+        var inner = canvas.addShape("Circle", new Rect(-innerDiameter/2, -innerDiameter/2, innerDiameter, innerDiameter));
+        inner.strokeColor = cut;
+        inner.fillColor = null;
+        inner.shadowColor = null;
+        inner.name = "Inner";
+        
+        var outer = canvas.addShape("Circle", new Rect(-outerDiameter/2, -outerDiameter/2, outerDiameter, outerDiameter));
+        outer.strokeColor = cut;
+        outer.fillColor = null;
+        outer.shadowColor = null;
+        outer.name = "Outer";
+        
+        function makeSlot(canvas, label, angle){
+            // OG #2934784: Performing a Union with a circle exactly center line aligned on an edge of a rectangle produces incorrect results. Make the rect ever so slightly bigger to avoid whatever numerical accuracy issue causes this.
+            var fudge = inchesToCanvas(0.01);
+            
+            // Left is centered on the origin
+            var slotLength = outerDiameter/2 - innerDiameter/2 - 2*slotInset - slotWidth;
+            var left = canvas.addShape("Circle", new Rect(-slotWidth/2, -slotWidth/2, slotWidth, slotWidth));
+            var mid = canvas.addShape("Rectangle", new Rect(-fudge, -slotWidth/2, slotLength + 2*fudge, slotWidth));
+            var right = canvas.addShape("Circle", new Rect(slotLength - slotWidth/2, -slotWidth/2, slotWidth, slotWidth));
+  
+            
+            var shape = canvas.combine([left, mid, right], ShapeCombination.Union);
+            shape.strokeColor = cut;
+            shape.fillColor = null;
+            shape.shadowColor = null;
+            shape.name = "Slot";
+            
+            var text = canvas.addText(label, new Point(slotLength + slotWidth + inchesToCanvas(1/8), 0));
+            text.fillType = null;
+            text.rotation = 90;
+            text.fontName = "Menlo-Regular";
+            text.textSize = 12;
+            text.textHorizontalAlignment = HorizontalTextAlignment.Center; // The default, but be clear about it
+            
+            // Reset the text bounds so that it is centered on the slot, since the following movement assumes the group as a whole has the slot centered (and it looks better)
+            var textBounds = text.geometry;
+            textBounds.y = -textBounds.height/2;
+            text.geometry = textBounds;
+
+            
+            var group = new Group([shape, text]);
+            
+            // Rotation is about the center of the shape. Move the center where we want it (-ish, real transforms about the origin would be better).
+            // Positive angles go clockwise around the origin.
+            var bounds = group.geometry;
+            
+            var radians = (angle / 360) * (2 * Math.PI);
+            var radius = (outerDiameter + innerDiameter) / 4 + text.geometry.height / 2;
+            var center = new Point(Math.cos(radians) * radius, Math.sin(radians) * radius);
+                        
+            group.geometry = new Rect(center.x - bounds.width/2, center.y - bounds.height/2, bounds.width, bounds.height);
+            group.rotation = angle;
+            
+            return group;
+        };
+        
+        function makeSlots(canvas, label, divisor) {
+            for (var step = 1; step < divisor; step += 1) {
+                var angle = (360/divisor) * step;
+                makeSlot(canvas, label, angle);
+            }
+        };
+        
+        // The "origin" slot that is a part of all the prime groups
+        makeSlot(canvas, "◆", 0);
+        
+        // Make a bunch of slots for even numbers
+        makeSlots(canvas, "2", 8);
+        
+        for (divisor of [3, 5, 7, 11, 13, 17]) {
+            makeSlots(canvas, divisor.toString(), divisor);
+        }
+    });
+
+    action.validate = function(selection){
+        return selection.canvas != null;
+    };
+        
+    return action;
+})();
