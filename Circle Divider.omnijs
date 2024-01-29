@@ -31,26 +31,13 @@
         const cut = Color.RGB(0, 0, 1);
         const engraveLine = Color.RGB(1, 0, 0);
         const engraveArea = Color.RGB(0, 0, 0);
-        
-        // Inner and outer circle cuts
-        var inner = canvas.addShape("Circle", new Rect(-innerDiameter/2, -innerDiameter/2, innerDiameter, innerDiameter));
-        inner.strokeColor = cut;
-        inner.fillColor = null;
-        inner.shadowColor = null;
-        inner.name = "Inner";
-        
-        var outer = canvas.addShape("Circle", new Rect(-outerDiameter/2, -outerDiameter/2, outerDiameter, outerDiameter));
-        outer.strokeColor = cut;
-        outer.fillColor = null;
-        outer.shadowColor = null;
-        outer.name = "Outer";
-        
+
         var slotGroups = [];
-        
+
         function degreesToRadians(degrees){
             return (degrees / 360) * (2 * Math.PI);
         };
-        
+
         function angleDifference(a, b){
             // There is no Math.fmod.
             var diff = a - b;
@@ -59,16 +46,35 @@
             }
             return diff;
         };
-        
+
         function makeSlotsGroup(canvas, slots, startAngle, endAngle){
-            // For now, just add lines to show the split between groups
+            // Add a wedge for this angle range
             var radius = outerDiameter;
 
-            var radians = degreesToRadians(startAngle);            
-            canvas.addLine(Point.zero, new Point(Math.cos(radians) * radius, Math.sin(radians) * radius));
+            var startRadians = degreesToRadians(startAngle);            
+            var startAnglePoint = new Point(Math.cos(startRadians) * radius, Math.sin(startRadians) * radius);
             
-            radians = degreesToRadians(endAngle);
-            canvas.addLine(Point.zero, new Point(Math.cos(radians) * radius, Math.sin(radians) * radius));
+            var endRadians = degreesToRadians(endAngle);
+            var endAnglePoint = new Point(Math.cos(endRadians) * radius, Math.sin(endRadians) * radius);
+
+            var wedge = canvas.newShape();
+            wedge.shapeVertices = [Point.zero, startAnglePoint, endAnglePoint];
+            
+            // Trim the wedge to the outer radius
+            var outer = canvas.addShape("Circle", new Rect(-outerDiameter/2, -outerDiameter/2, outerDiameter, outerDiameter));
+            var shape = canvas.combine([wedge, outer], ShapeCombination.Intersect);
+            shape.fillType = null;
+            
+            // Cut out the inner radius
+            var inner = canvas.addShape("Circle", new Rect(-innerDiameter/2, -innerDiameter/2, innerDiameter, innerDiameter));
+            shape = canvas.combine([inner, shape], ShapeCombination.Subtract);
+            shape.fillType = null;
+            shape.shadowColor = null;
+            shape.strokeColor = cut;
+            
+            // Make a new group with this and the slots themselves
+            var group = new Group([shape].concat(slots));
+            group.name = startAngle.toString() + " ... " + endAngle.toString();
         };
         
         function splitSlotsIntoGroups(canvas, slots) {
