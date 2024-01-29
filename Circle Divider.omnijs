@@ -11,11 +11,15 @@
     "paletteLabel": "Circle Divider",
 }*/
 (() => {
+    
     var action = new PlugIn.Action(function(selection) {
         // Canvas units are in points
         function inchesToCanvas(inches) {
             return inches * 72.0;   
         };
+        
+        console.clear();
+        console.log("Running");
         
         const canvas = selection.canvas;
         
@@ -41,6 +45,91 @@
         outer.shadowColor = null;
         outer.name = "Outer";
         
+        var slotGroups = [];
+        
+        function degreesToRadians(degrees){
+            return (degrees / 360) * (2 * Math.PI);
+        };
+        
+        function angleDifference(a, b){
+            // There is no Math.fmod.
+            var diff = a - b;
+            while (diff < 0) {
+                diff += 360;
+            }
+            return diff;
+        };
+        
+        function makeSlotsGroup(canvas, slots, startAngle, endAngle){
+            // For now, just add lines to show the split between groups
+            var radius = outerDiameter;
+
+            var radians = degreesToRadians(startAngle);            
+            canvas.addLine(Point.zero, new Point(Math.cos(radians) * radius, Math.sin(radians) * radius));
+            
+            radians = degreesToRadians(endAngle);
+            canvas.addLine(Point.zero, new Point(Math.cos(radians) * radius, Math.sin(radians) * radius));
+        };
+        
+        function splitSlotsIntoGroups(canvas, slots) {
+            // Sweep through the sorted slots and divide into groups of approximately 1/8th the circle.
+            // TODO: Back track or otherwise adjust the groups in cases where the dividing point would be on two slots that are very close (like with the 13 and 17).
+        
+            slots.forEach(function(slot){
+                console.log("slot", slot.rotation, slot.name);
+            });
+        
+            // The first slot should be at rotation == 0 and the last the highest. Start our sweep halfway between the last slot and the first (which is also at 360 degrees)
+            var firstSweepAngle = (slots[slots.length - 1].rotation + 360)/2;
+            var groupStartAngle = firstSweepAngle;
+            var currentSweepAngle = firstSweepAngle;
+            console.log("currentSweepAngle", currentSweepAngle);
+
+            var group = [];
+            
+            console.log("slots.length", slots.length);
+            
+            while (slots.length > 0) {
+                console.log("slots.length", slots.length);
+                if (slots.length == 1) {
+                    console.log("last slot");
+                    // Last slot, the end of its group should be the same as the start of the first group
+                    currentSweepAngle = firstSweepAngle;
+                    group.push(slots.shift());
+                    makeSlotsGroup(canvas, group, groupStartAngle, firstSweepAngle);
+                } else {
+                    // The candidate next angle, midway between the next two slots
+                    var slot0 = slots[0];
+                    var slot1 = slots[1];
+                    var candidateAngle = (slot0.rotation + slot1.rotation) / 2;
+                    
+                    var groupAngle = angleDifference(candidateAngle, groupStartAngle);
+                    console.log("groupAngle", groupAngle, candidateAngle, groupStartAngle);
+
+                    if (groupAngle > 360/8) {
+                        console.log("split group", candidateAngle);
+                        
+                        // Too much, make a new group
+                        makeSlotsGroup(canvas, group, groupStartAngle, currentSweepAngle);
+                        groupStartAngle = currentSweepAngle;
+                        currentSweepAngle = candidateAngle;
+                        group = [slot0];
+                        slots.shift();
+                    } else {
+                        console.log("continue group", candidateAngle);
+
+                        // Continue the existing group
+                        group.push(slots.shift());
+                        currentSweepAngle = candidateAngle;
+                    }
+                }
+            }
+            
+            if (group.length > 0) {
+                console.log("TODO: Handle last group");
+            }
+        };
+    
         function makeSlot(canvas, label, angle){
             // OG #2934784: Performing a Union with a circle exactly center line aligned on an edge of a rectangle produces incorrect results. Make the rect ever so slightly bigger to avoid whatever numerical accuracy issue causes this.
             var fudge = inchesToCanvas(0.01);
@@ -77,12 +166,15 @@
             // Positive angles go clockwise around the origin.
             var bounds = group.geometry;
             
-            var radians = (angle / 360) * (2 * Math.PI);
+            var radians = degreesToRadians(angle);
             var radius = (outerDiameter + innerDiameter) / 4 + text.geometry.height / 2;
             var center = new Point(Math.cos(radians) * radius, Math.sin(radians) * radius);
                         
             group.geometry = new Rect(center.x - bounds.width/2, center.y - bounds.height/2, bounds.width, bounds.height);
             group.rotation = angle;
+            group.name = label + "-" + angle.toString();
+            
+            slotGroups.push(group);
             
             return group;
         };
@@ -103,6 +195,13 @@
         for (divisor of [3, 5, 7, 11, 13, 17]) {
             makeSlots(canvas, divisor.toString(), divisor);
         }
+        
+        // Sort the resulting slots by their rotation so that we can form them into nearby groups for subdividing the circle for cutting.
+        slotGroups.sort(function(a,b){
+            return a.rotation - b.rotation;
+        });
+        
+        splitSlotsIntoGroups(canvas, slotGroups);
     });
 
     action.validate = function(selection){
