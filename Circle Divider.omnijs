@@ -75,24 +75,18 @@
             // Sweep through the sorted slots and divide into groups of approximately 1/8th the circle.
             // TODO: Back track or otherwise adjust the groups in cases where the dividing point would be on two slots that are very close (like with the 13 and 17).
         
-            slots.forEach(function(slot){
-                console.log("slot", slot.rotation, slot.name);
-            });
-        
             // The first slot should be at rotation == 0 and the last the highest. Start our sweep halfway between the last slot and the first (which is also at 360 degrees)
             var firstSweepAngle = (slots[slots.length - 1].rotation + 360)/2;
             var groupStartAngle = firstSweepAngle;
             var currentSweepAngle = firstSweepAngle;
+            var previousSlotAngleDifference = 0;
+            
             console.log("currentSweepAngle", currentSweepAngle);
 
             var group = [];
             
-            console.log("slots.length", slots.length);
-            
             while (slots.length > 0) {
-                console.log("slots.length", slots.length);
                 if (slots.length == 1) {
-                    console.log("last slot");
                     // Last slot, the end of its group should be the same as the start of the first group
                     currentSweepAngle = firstSweepAngle;
                     group.push(slots.shift());
@@ -101,12 +95,15 @@
                     // The candidate next angle, midway between the next two slots
                     var slot0 = slots[0];
                     var slot1 = slots[1];
-                    var candidateAngle = (slot0.rotation + slot1.rotation) / 2;
+                    var nextSlotAngleDifference = angleDifference(slot1.rotation, slot0.rotation);
+                    var candidateAngle = (slot0.rotation + slot1.rotation) / 2; // Should never have angles wrap from 360 back to 0 here
                     
                     var groupAngle = angleDifference(candidateAngle, groupStartAngle);
-                    console.log("groupAngle", groupAngle, candidateAngle, groupStartAngle);
+                    console.log("nextSlotAngleDifference", nextSlotAngleDifference, slot0.name, slot1.name);
 
-                    if (groupAngle > 360/8) {
+                    // If the group is getting too big, start a new one. BUT if the current pair of slots are really close, keep going to avoid thin edges.
+                    // It might end up being better to backtrack, but this is easier and might work!
+                    if (groupAngle > 360/8 && previousSlotAngleDifference > 3) {
                         console.log("split group", candidateAngle);
                         
                         // Too much, make a new group
@@ -116,12 +113,14 @@
                         group = [slot0];
                         slots.shift();
                     } else {
-                        console.log("continue group", candidateAngle);
+                        //console.log("continue group", candidateAngle);
 
                         // Continue the existing group
                         group.push(slots.shift());
                         currentSweepAngle = candidateAngle;
                     }
+                    
+                    previousSlotAngleDifference = nextSlotAngleDifference
                 }
             }
             
